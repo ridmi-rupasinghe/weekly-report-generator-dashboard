@@ -2,7 +2,7 @@ import { Navigate, Outlet } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import Layout from '../components/Layout';
 
-export default function ProtectedRoute({ managerOnly = false }) {
+export default function ProtectedRoute({ managerOnly = false, teamMemberOnly = false }) {
   const { user, loading } = useAuth();
 
   if (loading) {
@@ -15,6 +15,7 @@ export default function ProtectedRoute({ managerOnly = false }) {
 
   if (!user) return <Navigate to="/login" replace />;
   if (managerOnly && user.role !== 'manager') return <Navigate to="/reports" replace />;
+  if (teamMemberOnly && user.role === 'manager') return <Navigate to="/team-reports" replace />;
 
   return (
     <Layout>

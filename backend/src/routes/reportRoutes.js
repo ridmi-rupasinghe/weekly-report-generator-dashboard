@@ -18,11 +18,11 @@ const reportValidation = [
 
 router.use(protect);
 
-router.get('/my', reportController.getMyReports);
+router.get('/my', authorize('team_member'), reportController.getMyReports);
 router.get('/team', authorize('manager'), reportController.getTeamReports);
 router.get('/:id', param('id').isMongoId(), validate, reportController.getReport);
-router.post('/', reportValidation, validate, reportController.createReport);
-router.put('/:id', [param('id').isMongoId(), ...reportValidation], validate, reportController.updateReport);
-router.delete('/:id', param('id').isMongoId(), validate, reportController.deleteReport);
+router.post('/', authorize('team_member'), reportValidation, validate, reportController.createReport);
+router.put('/:id', authorize('team_member'), [param('id').isMongoId(), ...reportValidation], validate, reportController.updateReport);
+router.delete('/:id', authorize('team_member'), param('id').isMongoId(), validate, reportController.deleteReport);
 
 module.exports = router;

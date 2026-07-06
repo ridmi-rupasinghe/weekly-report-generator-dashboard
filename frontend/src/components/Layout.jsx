@@ -27,9 +27,11 @@ export default function Layout({ children }) {
           </span>
         </div>
         <nav className="flex-1 p-4 space-y-1">
-          <NavLink to="/reports" className={navLinkClass}>
-            <FileText size={18} /> My Reports
-          </NavLink>
+          {!isManager && (
+            <NavLink to="/reports" className={navLinkClass}>
+              <FileText size={18} /> My Reports
+            </NavLink>
+          )}
           {isManager && (
             <>
               <NavLink to="/dashboard" className={navLinkClass}>
