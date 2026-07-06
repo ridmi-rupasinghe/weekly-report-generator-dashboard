@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Save, Send, Trash2 } from 'lucide-react';
 import api from '../services/api';
+import StatusBadge from '../components/StatusBadge';
 import { getCurrentWeek, toDateInput } from '../utils/dates';
 
 const emptyForm = () => {
@@ -89,24 +90,30 @@ export default function ReportForm() {
 
   return (
     <div className="max-w-3xl">
-      <h2 className="text-2xl font-bold mb-6">{isEdit ? 'Edit Report' : 'New Weekly Report'}</h2>
+      <div className="flex items-center gap-3 mb-2">
+        <h2 className="text-2xl font-bold">{isEdit ? 'Edit Report' : 'New Weekly Report'}</h2>
+        {isEdit && <StatusBadge status={form.status} />}
+      </div>
+      <p className="text-sm text-slate-500 mb-6">
+        All team members use the same report format. You can edit your report before or after submission.
+      </p>
       {error && <div className="mb-4 p-3 bg-red-50 text-red-700 text-sm rounded-lg">{error}</div>}
 
       <div className="card p-6 space-y-5">
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="label">Week Start</label>
-            <input type="date" name="weekStart" className="input" value={form.weekStart} onChange={handleChange} disabled={isSubmitted} />
+            <input type="date" name="weekStart" className="input" value={form.weekStart} onChange={handleChange} />
           </div>
           <div>
             <label className="label">Week End</label>
-            <input type="date" name="weekEnd" className="input" value={form.weekEnd} onChange={handleChange} disabled={isSubmitted} />
+            <input type="date" name="weekEnd" className="input" value={form.weekEnd} onChange={handleChange} />
           </div>
         </div>
 
         <div>
           <label className="label">Project / Category</label>
-          <select name="project" className="input" value={form.project} onChange={handleChange} disabled={isSubmitted} required>
+          <select name="project" className="input" value={form.project} onChange={handleChange} required>
             <option value="">Select project</option>
             {projects.map((p) => (
               <option key={p._id} value={p._id}>{p.name}</option>
@@ -116,31 +123,35 @@ export default function ReportForm() {
 
         <div>
           <label className="label">Tasks Completed</label>
-          <textarea name="tasksCompleted" className="input min-h-[100px]" value={form.tasksCompleted} onChange={handleChange} disabled={isSubmitted} placeholder="One task per line" required />
+          <textarea name="tasksCompleted" className="input min-h-[100px]" value={form.tasksCompleted} onChange={handleChange} placeholder="One task per line" required />
         </div>
 
         <div>
           <label className="label">Tasks Planned for Next Week</label>
-          <textarea name="tasksPlanned" className="input min-h-[100px]" value={form.tasksPlanned} onChange={handleChange} disabled={isSubmitted} placeholder="One task per line" required />
+          <textarea name="tasksPlanned" className="input min-h-[100px]" value={form.tasksPlanned} onChange={handleChange} placeholder="One task per line" required />
         </div>
 
         <div>
           <label className="label">Blockers / Challenges</label>
-          <textarea name="blockers" className="input min-h-[80px]" value={form.blockers} onChange={handleChange} disabled={isSubmitted} placeholder="Any blockers or challenges faced" />
+          <textarea name="blockers" className="input min-h-[80px]" value={form.blockers} onChange={handleChange} placeholder="Any blockers or challenges faced" />
         </div>
 
         <div>
           <label className="label">Hours Worked (optional)</label>
-          <input type="number" name="hoursWorked" className="input" value={form.hoursWorked} onChange={handleChange} disabled={isSubmitted} min="0" step="0.5" placeholder="e.g. 40" />
+          <input type="number" name="hoursWorked" className="input" value={form.hoursWorked} onChange={handleChange} min="0" step="0.5" placeholder="e.g. 40" />
         </div>
 
         <div>
           <label className="label">Notes / Links (optional)</label>
-          <textarea name="notes" className="input min-h-[60px]" value={form.notes} onChange={handleChange} disabled={isSubmitted} placeholder="Additional notes or relevant links" />
+          <textarea name="notes" className="input min-h-[60px]" value={form.notes} onChange={handleChange} placeholder="Additional notes or relevant links" />
         </div>
 
         <div className="flex items-center gap-3 pt-2">
-          {!isSubmitted && (
+          {isSubmitted ? (
+            <button onClick={() => save(false)} className="btn-primary" disabled={saving}>
+              <Save size={16} /> Save Changes
+            </button>
+          ) : (
             <>
               <button onClick={() => save(false)} className="btn-secondary" disabled={saving}>
                 <Save size={16} /> Save Draft
@@ -154,9 +165,6 @@ export default function ReportForm() {
             <button onClick={handleDelete} className="btn-danger ml-auto">
               <Trash2 size={16} /> Delete
             </button>
-          )}
-          {isSubmitted && (
-            <p className="text-sm text-green-600 font-medium">This report has been submitted and is read-only.</p>
           )}
         </div>
       </div>
