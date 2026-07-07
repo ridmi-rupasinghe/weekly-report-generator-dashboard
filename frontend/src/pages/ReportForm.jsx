@@ -3,7 +3,10 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { Save, Send, Trash2 } from 'lucide-react';
 import api from '../services/api';
 import StatusBadge from '../components/StatusBadge';
-import { getCurrentWeek, toDateInput } from '../utils/dates';
+import ConfirmModal from '../components/ConfirmModal';
+import PageHeader from '../components/PageHeader';
+import { useToast } from '../context/ToastContext';
+import { getCurrentWeek, toDateInput, weekEndFromStart } from '../utils/dates';
 
 const emptyForm = () => {
   const { weekStart, weekEnd } = getCurrentWeek();
@@ -24,10 +27,13 @@ export default function ReportForm() {
   const { id } = useParams();
   const isEdit = Boolean(id);
   const navigate = useNavigate();
+  const { showToast } = useToast();
   const [form, setForm] = useState(emptyForm());
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(isEdit);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -51,7 +57,14 @@ export default function ReportForm() {
     }
   }, [id, isEdit]);
 
-  const handleChange = (e) => setForm({ ...form, [e.target.name]: e.target.value });
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    if (name === 'weekStart') {
+      setForm({ ...form, weekStart: value, weekEnd: weekEndFromStart(value) });
+    } else {
+      setForm({ ...form, [name]: value });
+    }
+  };
 
   const save = async (submit = false) => {
     setError('');
@@ -68,39 +81,59 @@ export default function ReportForm() {
       } else {
         await api.post('/reports', payload);
       }
+      showToast(submit ? 'Report submitted successfully!' : 'Report saved successfully!', 'success');
       navigate('/reports');
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to save report');
+      const msg = err.response?.data?.message || 'Failed to save report';
+      setError(msg);
+      showToast(msg, 'error');
     } finally {
       setSaving(false);
     }
   };
 
   const handleDelete = async () => {
-    if (!confirm('Delete this draft report?')) return;
-    await api.delete(`/reports/${id}`);
-    navigate('/reports');
+    setDeleting(true);
+    try {
+      await api.delete(`/reports/${id}`);
+      showToast('Report deleted', 'info');
+      navigate('/reports');
+    } catch (err) {
+      showToast(err.response?.data?.message || 'Failed to delete report', 'error');
+    } finally {
+      setDeleting(false);
+      setShowDeleteModal(false);
+    }
   };
 
   if (loading) {
-    return <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600" /></div>;
+    return (
+      <div className="max-w-3xl">
+        <div className="animate-pulse space-y-4">
+          <div className="h-8 bg-slate-200 rounded w-1/3" />
+          <div className="card p-6 space-y-4">
+            {[1, 2, 3, 4].map((i) => <div key={i} className="h-10 bg-slate-200 rounded" />)}
+          </div>
+        </div>
+      </div>
+    );
   }
 
   const isSubmitted = form.status === 'submitted';
+  const taskCount = form.tasksCompleted.split('\n').filter((t) => t.trim()).length;
 
   return (
     <div className="max-w-3xl">
-      <div className="flex items-center gap-3 mb-2">
-        <h2 className="text-2xl font-bold">{isEdit ? 'Edit Report' : 'New Weekly Report'}</h2>
-        {isEdit && <StatusBadge status={form.status} />}
-      </div>
-      <p className="text-sm text-slate-500 mb-6">
-        All team members use the same report format. You can edit your report before or after submission.
-      </p>
+      <PageHeader
+        title={isEdit ? 'Edit Report' : 'New Weekly Report'}
+        subtitle="All team members use the same report format. You can edit before or after submission."
+        breadcrumb="Team Member / Reports"
+        action={isEdit && <StatusBadge status={form.status} />}
+      />
       {error && <div className="mb-4 p-3 bg-red-50 text-red-700 text-sm rounded-lg">{error}</div>}
 
       <div className="card p-6 space-y-5">
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="label">Week Start</label>
             <input type="date" name="weekStart" className="input" value={form.weekStart} onChange={handleChange} />
@@ -122,7 +155,10 @@ export default function ReportForm() {
         </div>
 
         <div>
-          <label className="label">Tasks Completed</label>
+          <div className="flex justify-between items-center mb-1">
+            <label className="label mb-0">Tasks Completed</label>
+            <span className="text-xs text-slate-400">{taskCount} task{taskCount !== 1 ? 's' : ''}</span>
+          </div>
           <textarea name="tasksCompleted" className="input min-h-[100px]" value={form.tasksCompleted} onChange={handleChange} placeholder="One task per line" required />
         </div>
 
@@ -146,15 +182,15 @@ export default function ReportForm() {
           <textarea name="notes" className="input min-h-[60px]" value={form.notes} onChange={handleChange} placeholder="Additional notes or relevant links" />
         </div>
 
-        <div className="flex items-center gap-3 pt-2">
+        <div className="flex flex-wrap items-center gap-3 pt-2">
           {isSubmitted ? (
             <button onClick={() => save(false)} className="btn-primary" disabled={saving}>
-              <Save size={16} /> Save Changes
+              <Save size={16} /> {saving ? 'Saving...' : 'Save Changes'}
             </button>
           ) : (
             <>
               <button onClick={() => save(false)} className="btn-secondary" disabled={saving}>
-                <Save size={16} /> Save Draft
+                <Save size={16} /> {saving ? 'Saving...' : 'Save Draft'}
               </button>
               <button onClick={() => save(true)} className="btn-primary" disabled={saving}>
                 <Send size={16} /> Submit Report
@@ -162,12 +198,22 @@ export default function ReportForm() {
             </>
           )}
           {isEdit && !isSubmitted && (
-            <button onClick={handleDelete} className="btn-danger ml-auto">
+            <button onClick={() => setShowDeleteModal(true)} className="btn-danger sm:ml-auto">
               <Trash2 size={16} /> Delete
             </button>
           )}
         </div>
       </div>
+
+      <ConfirmModal
+        isOpen={showDeleteModal}
+        title="Delete Draft Report"
+        message="This draft report will be permanently deleted. This action cannot be undone."
+        confirmLabel="Delete"
+        onConfirm={handleDelete}
+        onCancel={() => setShowDeleteModal(false)}
+        loading={deleting}
+      />
     </div>
   );
 }
