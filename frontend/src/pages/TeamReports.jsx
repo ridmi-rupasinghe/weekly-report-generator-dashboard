@@ -1,7 +1,10 @@
 import { useState, useEffect } from 'react';
-import { Filter } from 'lucide-react';
+import { Filter, Search } from 'lucide-react';
 import api from '../services/api';
 import StatusBadge from '../components/StatusBadge';
+import PageHeader from '../components/PageHeader';
+import SubmissionStatusPanel from '../components/SubmissionStatusPanel';
+import { ReportListSkeleton } from '../components/Skeleton';
 import { formatWeekRange, toDateInput, getCurrentWeek } from '../utils/dates';
 
 export default function TeamReports() {
@@ -44,24 +47,48 @@ export default function TeamReports() {
 
   const handleFilter = (e) => setFilters({ ...filters, [e.target.name]: e.target.value });
 
+  const clearFilters = () => {
+    const { weekStart, weekEnd } = getCurrentWeek();
+    setFilters({
+      weekStart: toDateInput(weekStart),
+      weekEnd: toDateInput(weekEnd),
+      userId: '',
+      projectId: '',
+      status: '',
+    });
+  };
+
   const memberStatus = users.map((user) => {
     const userReports = reports.filter((r) => r.user._id === user._id || r.user === user._id);
     const hasSubmitted = userReports.some((r) => r.status === 'submitted');
     const weekEnd = new Date(filters.weekEnd);
     const isLate = !hasSubmitted && new Date() > weekEnd;
-    return { ...user, status: hasSubmitted ? 'submitted' : isLate ? 'late' : 'pending' };
+    return { ...user, userId: user._id, status: hasSubmitted ? 'submitted' : isLate ? 'late' : 'pending' };
   });
+
+  const hasActiveFilters = filters.userId || filters.projectId || filters.status;
 
   return (
     <div>
-      <h2 className="text-2xl font-bold mb-6">Team Reports</h2>
+      <PageHeader
+        title="Team Reports"
+        subtitle="View and filter all team member reports"
+        breadcrumb="Manager / Team Reports"
+      />
 
       <div className="card p-4 mb-6">
-        <div className="flex items-center gap-2 mb-3">
-          <Filter size={16} className="text-slate-400" />
-          <span className="text-sm font-medium">Filters</span>
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <Filter size={16} className="text-slate-400" />
+            <span className="text-sm font-medium">Filters</span>
+          </div>
+          {hasActiveFilters && (
+            <button onClick={clearFilters} className="text-xs text-primary-600 hover:underline">
+              Clear filters
+            </button>
+          )}
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
           <div>
             <label className="label">Week Start</label>
             <input type="date" name="weekStart" className="input" value={filters.weekStart} onChange={handleFilter} />
@@ -95,39 +122,48 @@ export default function TeamReports() {
         </div>
       </div>
 
-      <div className="card mb-6">
-        <div className="px-5 py-3 border-b border-slate-100">
-          <h3 className="font-semibold text-sm">Submission Status</h3>
-        </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-px bg-slate-100">
-          {memberStatus.map((m) => (
-            <div key={m._id} className="bg-white px-4 py-3 flex items-center justify-between">
-              <span className="text-sm">{m.name}</span>
-              <StatusBadge status={m.status} />
-            </div>
-          ))}
-        </div>
+      <div className="mb-6">
+        <SubmissionStatusPanel members={memberStatus} />
       </div>
 
       {loading ? (
-        <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600" /></div>
+        <ReportListSkeleton />
       ) : reports.length === 0 ? (
-        <div className="card p-12 text-center text-slate-400">No reports match your filters</div>
+        <div className="card p-12 text-center">
+          <Search size={40} className="mx-auto text-slate-300 mb-3" />
+          <h3 className="font-medium text-slate-600">No reports match your filters</h3>
+          <p className="text-sm text-slate-400 mt-1">Try adjusting the date range or clearing filters</p>
+          {hasActiveFilters && (
+            <button onClick={clearFilters} className="btn-secondary mt-4">Clear Filters</button>
+          )}
+        </div>
       ) : (
         <div className="space-y-4">
           {reports.map((report) => (
-            <div key={report._id} className="card p-5">
+            <div key={report._id} className="card p-5 hover:shadow-md transition-shadow">
               <div className="flex items-start justify-between mb-3">
                 <div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-semibold">{report.user?.name}</span>
                     <StatusBadge status={report.status} />
+                    {report.project?.color && (
+                      <span
+                        className="text-xs px-2 py-0.5 rounded-full text-white"
+                        style={{ backgroundColor: report.project.color }}
+                      >
+                        {report.project.name}
+                      </span>
+                    )}
                   </div>
                   <p className="text-xs text-slate-500 mt-1">
-                    {report.project?.name} · {formatWeekRange(report.weekStart, report.weekEnd)}
+                    {formatWeekRange(report.weekStart, report.weekEnd)}
                   </p>
                 </div>
-                {report.hoursWorked && <span className="text-sm text-slate-500">{report.hoursWorked}h</span>}
+                {report.hoursWorked != null && (
+                  <span className="text-sm font-medium text-slate-500 bg-slate-100 px-2 py-1 rounded-lg">
+                    {report.hoursWorked}h
+                  </span>
+                )}
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
                 <div>
@@ -140,7 +176,7 @@ export default function TeamReports() {
                 </div>
               </div>
               {report.blockers && (
-                <div className="mt-3 p-3 bg-red-50 rounded-lg text-sm text-red-700">
+                <div className="mt-3 p-3 bg-red-50 rounded-lg text-sm text-red-700 border border-red-100">
                   <span className="font-medium">Blockers: </span>{report.blockers}
                 </div>
               )}
