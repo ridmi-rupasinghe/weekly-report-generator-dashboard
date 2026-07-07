@@ -24,7 +24,7 @@ export default function App() {
       <Route path="/register" element={<Register />} />
       <Route path="/" element={<HomeRedirect />} />
 
-      <Route element={<ProtectedRoute />}>
+      <Route element={<ProtectedRoute teamMemberOnly />}>
         <Route path="/reports" element={<MyReports />} />
         <Route path="/reports/new" element={<ReportForm />} />
         <Route path="/reports/:id" element={<ReportForm />} />
