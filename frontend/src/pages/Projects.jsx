@@ -1,19 +1,34 @@
 import { useState, useEffect } from 'react';
-import { Plus, Pencil, Trash2, Users } from 'lucide-react';
+import { Plus, Pencil, Trash2, Users, FolderKanban } from 'lucide-react';
 import api from '../services/api';
+import ConfirmModal from '../components/ConfirmModal';
+import PageHeader from '../components/PageHeader';
+import { CardSkeleton } from '../components/Skeleton';
+import { useToast } from '../context/ToastContext';
 
 export default function Projects() {
+  const { showToast } = useToast();
   const [projects, setProjects] = useState([]);
   const [users, setUsers] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState({ name: '', description: '', color: '#6366f1' });
   const [assigning, setAssigning] = useState(null);
   const [selectedMembers, setSelectedMembers] = useState([]);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleting, setDeleting] = useState(false);
 
   const load = () => {
-    api.get('/projects').then(({ data }) => setProjects(data.projects));
-    api.get('/auth/users').then(({ data }) => setUsers(data.users.filter((u) => u.role === 'team_member')));
+    setLoading(true);
+    Promise.all([
+      api.get('/projects'),
+      api.get('/auth/users'),
+    ]).then(([projectsRes, usersRes]) => {
+      setProjects(projectsRes.data.projects);
+      setUsers(usersRes.data.users.filter((u) => u.role === 'team_member'));
+      setLoading(false);
+    });
   };
 
   useEffect(() => { load(); }, []);
@@ -26,13 +41,19 @@ export default function Projects() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (editing) {
-      await api.put(`/projects/${editing}`, form);
-    } else {
-      await api.post('/projects', form);
+    try {
+      if (editing) {
+        await api.put(`/projects/${editing}`, form);
+        showToast('Project updated successfully!', 'success');
+      } else {
+        await api.post('/projects', form);
+        showToast('Project created successfully!', 'success');
+      }
+      resetForm();
+      load();
+    } catch (err) {
+      showToast(err.response?.data?.message || 'Failed to save project', 'error');
     }
-    resetForm();
-    load();
   };
 
   const handleEdit = (project) => {
@@ -41,10 +62,18 @@ export default function Projects() {
     setShowForm(true);
   };
 
-  const handleDelete = async (id) => {
-    if (!confirm('Delete this project?')) return;
-    await api.delete(`/projects/${id}`);
-    load();
+  const handleDelete = async () => {
+    setDeleting(true);
+    try {
+      await api.delete(`/projects/${deleteTarget}`);
+      showToast('Project deleted', 'info');
+      setDeleteTarget(null);
+      load();
+    } catch (err) {
+      showToast(err.response?.data?.message || 'Failed to delete project', 'error');
+    } finally {
+      setDeleting(false);
+    }
   };
 
   const openAssign = (project) => {
@@ -53,9 +82,14 @@ export default function Projects() {
   };
 
   const saveAssign = async () => {
-    await api.put(`/projects/${assigning}/members`, { memberIds: selectedMembers });
-    setAssigning(null);
-    load();
+    try {
+      await api.put(`/projects/${assigning}/members`, { memberIds: selectedMembers });
+      showToast('Team members assigned successfully!', 'success');
+      setAssigning(null);
+      load();
+    } catch (err) {
+      showToast(err.response?.data?.message || 'Failed to assign members', 'error');
+    }
   };
 
   const toggleMember = (id) => {
@@ -66,15 +100,16 @@ export default function Projects() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h2 className="text-2xl font-bold">Projects & Categories</h2>
-          <p className="text-slate-500 text-sm mt-1">Manage work categories and team assignments</p>
-        </div>
-        <button onClick={() => { resetForm(); setShowForm(true); }} className="btn-primary">
-          <Plus size={18} /> Add Project
-        </button>
-      </div>
+      <PageHeader
+        title="Projects & Categories"
+        subtitle="Manage work categories and team assignments"
+        breadcrumb="Manager / Projects"
+        action={
+          <button onClick={() => { resetForm(); setShowForm(true); }} className="btn-primary">
+            <Plus size={18} /> Add Project
+          </button>
+        }
+      />
 
       {showForm && (
         <div className="card p-5 mb-6">
@@ -107,6 +142,7 @@ export default function Projects() {
             {users.map((u) => (
               <button
                 key={u._id}
+                type="button"
                 onClick={() => toggleMember(u._id)}
                 className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
                   selectedMembers.includes(u._id)
@@ -125,39 +161,64 @@ export default function Projects() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {projects.map((project) => (
-          <div key={project._id} className="card p-5">
-            <div className="flex items-start justify-between">
-              <div className="flex items-center gap-2">
-                <div className="w-4 h-4 rounded" style={{ backgroundColor: project.color }} />
-                <h3 className="font-semibold">{project.name}</h3>
+      {loading ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {[1, 2, 3].map((i) => <CardSkeleton key={i} />)}
+        </div>
+      ) : projects.length === 0 ? (
+        <div className="card p-12 text-center">
+          <FolderKanban size={48} className="mx-auto text-slate-300 mb-4" />
+          <h3 className="font-medium text-slate-600">No projects yet</h3>
+          <p className="text-sm text-slate-400 mt-1">Create your first project category to get started</p>
+          <button onClick={() => { resetForm(); setShowForm(true); }} className="btn-primary mt-4">
+            <Plus size={16} /> Add Project
+          </button>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {projects.map((project) => (
+            <div key={project._id} className="card p-5 hover:shadow-md transition-shadow">
+              <div className="flex items-start justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 rounded shrink-0" style={{ backgroundColor: project.color }} />
+                  <h3 className="font-semibold">{project.name}</h3>
+                </div>
+                <div className="flex gap-1">
+                  <button onClick={() => openAssign(project)} className="p-1.5 text-slate-400 hover:text-primary-600 rounded" title="Assign members">
+                    <Users size={16} />
+                  </button>
+                  <button onClick={() => handleEdit(project)} className="p-1.5 text-slate-400 hover:text-primary-600 rounded">
+                    <Pencil size={16} />
+                  </button>
+                  <button onClick={() => setDeleteTarget(project._id)} className="p-1.5 text-slate-400 hover:text-red-600 rounded">
+                    <Trash2 size={16} />
+                  </button>
+                </div>
               </div>
-              <div className="flex gap-1">
-                <button onClick={() => openAssign(project)} className="p-1.5 text-slate-400 hover:text-primary-600 rounded" title="Assign members">
-                  <Users size={16} />
-                </button>
-                <button onClick={() => handleEdit(project)} className="p-1.5 text-slate-400 hover:text-primary-600 rounded">
-                  <Pencil size={16} />
-                </button>
-                <button onClick={() => handleDelete(project._id)} className="p-1.5 text-slate-400 hover:text-red-600 rounded">
-                  <Trash2 size={16} />
-                </button>
-              </div>
+              {project.description && <p className="text-sm text-slate-500 mt-2">{project.description}</p>}
+              {project.assignedMembers?.length > 0 && (
+                <div className="mt-3 flex flex-wrap gap-1">
+                  {project.assignedMembers.map((m) => (
+                    <span key={m._id || m} className="text-xs px-2 py-0.5 bg-slate-100 rounded-full text-slate-600">
+                      {m.name || users.find((u) => u._id === m)?.name}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
-            {project.description && <p className="text-sm text-slate-500 mt-2">{project.description}</p>}
-            {project.assignedMembers?.length > 0 && (
-              <div className="mt-3 flex flex-wrap gap-1">
-                {project.assignedMembers.map((m) => (
-                  <span key={m._id || m} className="text-xs px-2 py-0.5 bg-slate-100 rounded-full text-slate-600">
-                    {m.name || users.find((u) => u._id === m)?.name}
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
+
+      <ConfirmModal
+        isOpen={Boolean(deleteTarget)}
+        title="Delete Project"
+        message="This project category will be permanently deleted. Reports linked to it may be affected."
+        confirmLabel="Delete"
+        onConfirm={handleDelete}
+        onCancel={() => setDeleteTarget(null)}
+        loading={deleting}
+      />
     </div>
   );
 }
